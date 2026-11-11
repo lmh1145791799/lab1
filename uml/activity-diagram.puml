@@ -1,0 +1,70 @@
+@startuml activity-diagram
+title Activity Diagram: Purchase Reservation and Trade Completion (REQ-008)
+
+|#LightBlue|Buyer|
+start
+:Search / filter products (REQ-007);
+:View product detail;
+:Submit reservation (qty n >= 1);
+
+|#LightGreen|System|
+if (Duplicate submission? (REQ-017)) then (yes)
+  :Return existing reservation with prompt;
+  stop
+else (no)
+  :Check latest product status
+  and available qty (REQ-016);
+  if (Published and available qty >= n?) then (no)
+    :Reject, prompt to refresh page;
+    stop
+  else (yes)
+    if (Buyer already has an active
+    reservation on this product? (REQ-015)) then (yes)
+      :Reject, return existing reservation;
+      stop
+    else (no)
+      :Create reservation (PENDING_CONFIRM),
+      available qty - n (REQ-020);
+      :Write operation log (REQ-022);
+      :Notify seller;
+    endif
+  endif
+endif
+
+|#Pink|Seller|
+if (Handle reservation?) then (reject)
+  |#LightGreen|System|
+  :Reservation -> REJECTED,
+  available qty + n (REQ-013/020);
+  :Write log and notify buyer;
+  stop
+else (confirm)
+endif
+
+|#LightGreen|System|
+:Reservation -> CONFIRMED,
+validity starts from confirmation (REQ-011);
+
+|#LightBlue|Buyer|
+:Offline trade with seller;
+:Confirm completion;
+
+|#LightGreen|System|
+if (Both parties confirmed within validity? (REQ-011)) then (yes)
+  :Reservation -> COMPLETED;
+  :Stock - n; if stock == 0 then
+  product -> SOLD (REQ-006/020);
+  :Write log and notify both parties;
+  stop
+else (no, validity expired)
+  :Auto-mark reservation as COMPLETED
+  and sync product status (REQ-011/018);
+  stop
+endif
+
+note right
+  Branches omitted here: buyer cancels
+  before confirmation, negotiated cancel,
+  auto-expire on timeout (REQ-010/013/018)
+end note
+@enduml

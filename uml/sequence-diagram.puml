@@ -1,0 +1,40 @@
+@startuml sequence-diagram
+title Sequence Diagram: Buyer submits a reservation (with status and stock sync)
+
+actor Buyer as B
+participant "WebFrontend" as UI
+participant "ReservationService\n(M4)" as RS
+participant "ProductService\n(M2)" as PS
+database "Database\n(M7)" as DB
+participant "LogService\n(M6)" as LOG
+participant "NotificationService\n(M6)" as NS
+
+B -> UI : submitReservation(productId, qty n)
+UI -> RS : createReservation(request with fingerprint)
+RS -> RS : idempotency check (REQ-017)
+alt duplicate submission
+  RS --> UI : return existing reservation id
+  UI --> B : prompt "do not resubmit"
+else new request
+  RS -> PS : query latest product status and available qty (REQ-016)
+  PS -> DB : read product row (lock)
+  DB --> PS : status / stockQty / reservedQty
+  PS --> RS : validation data
+  alt validation failed (taken down / sold out / qty insufficient / active reservation exists, REQ-014/015/016)
+    RS --> UI : reject, prompt to refresh page
+    UI --> B : show reject reason
+  else validation passed
+    RS -> DB : transaction: insert reservation (PENDING_CONFIRM),\nproduct.reservedQty += n (REQ-020)
+    alt transaction failed due to concurrency conflict (REQ-026)
+      DB --> RS : rollback, reservation and stock unchanged
+      RS --> UI : reservation failed, prompt to retry
+    else transaction committed
+      DB --> RS : reservation created
+      RS -> LOG : log "reservation created" (REQ-022)
+      RS -> NS : notify seller of new reservation
+      RS --> UI : return reservation record
+      UI --> B : show success (PENDING_CONFIRM)
+    end
+  end
+end
+@enduml

@@ -1,0 +1,168 @@
+@startuml class-diagram
+title Second-hand Trading System - Class Diagram (Core Domain Model)
+
+skinparam classAttributeIconSize 0
+hide empty member
+
+enum ProductStatus {
+  DRAFT
+  PENDING_REVIEW
+  REJECTED
+  PUBLISHED
+  TAKEN_DOWN
+  VIOLATION_TAKEN_DOWN
+  SOLD
+}
+
+enum ReservationStatus {
+  PENDING_CONFIRM
+  CONFIRMED
+  REJECTED
+  CANCELLED
+  EXPIRED
+  COMPLETED
+}
+
+abstract class User {
+  - userId : Long
+  - account : String
+  - password : String
+  - nickname : String
+  - contact : String
+  + register() : void
+  + login() : void
+}
+
+class Buyer {
+  + searchProduct(kw, filters) : List~Product~
+  + createReservation(productId, qty) : Reservation
+  + cancelReservation(rsvId) : void
+  + confirmCompletion(rsvId) : void
+  + viewMyReservations() : List~Reservation~
+}
+
+class Seller {
+  + publishProduct(p) : void
+  + modifyProduct(p) : void
+  + takeDownProduct(p) : void
+  + confirmReservation(rsvId) : void
+  + rejectReservation(rsvId) : void
+  + confirmCompletion(rsvId) : void
+  + viewMyStatistics() : Statistics
+}
+
+class Admin {
+  + auditProduct(p, pass, reason) : void
+  + handleViolation(p, reason) : void
+  + manageUser(u) : void
+  + viewGlobalStatistics() : Statistics
+  + queryAllLogs(cond) : List~OperationLog~
+}
+
+class Product {
+  - productId : Long
+  - title : String
+  - description : String
+  - price : BigDecimal
+  - conditionGrade : String
+  - location : String
+  - tradeMethod : String
+  - stockQty : int
+  - reservedQty : int
+  - publishTime : DateTime
+  - status : ProductStatus
+  + availableQty() : int
+  + submitForReview() : void
+  + publish() : void
+  + takeDown() : void
+  + markViolation(reason) : void
+  + occupy(qty) : void
+  + release(qty) : void
+  + completeTrade(qty) : void
+}
+
+class ProductImage {
+  - imageId : Long
+  - url : String
+  - sortOrder : int
+}
+
+class Category {
+  - categoryId : Long
+  - name : String
+}
+
+class Reservation {
+  - reservationId : Long
+  - quantity : int
+  - reserveTime : DateTime
+  - validDeadline : DateTime
+  - status : ReservationStatus
+  - confirmTime : DateTime
+  - finishTime : DateTime
+  - cancelReason : String
+  + confirm() : void
+  + reject() : void
+  + cancel(reason) : void
+  + expire() : void
+  + complete() : void
+}
+
+class ReviewRecord {
+  - recordId : Long
+  - result : String
+  - reason : String
+  - auditTime : DateTime
+}
+
+class OperationLog {
+  - logId : Long
+  - action : String
+  - operateTime : DateTime
+  - detail : String
+  - result : String
+  - relatedId : Long
+}
+
+class Notification {
+  - noticeId : Long
+  - content : String
+  - type : String
+  - sendTime : DateTime
+}
+
+User <|-- Buyer
+User <|-- Seller
+User <|-- Admin
+
+Seller "1" --> "*" Product : publish / maintain
+Product "*" --> "1" Category : belongs to
+Product "1" *-- "*" ProductImage : contains
+
+Buyer "1" --> "*" Reservation : creates
+Seller "1" --> "*" Reservation : handles
+Reservation "*" --> "1" Product : reserves
+
+Admin "1" --> "*" ReviewRecord : audits
+ReviewRecord "*" --> "1" Product : for
+
+User "1" --> "*" OperationLog : generates
+User "1" --> "*" Notification : receives
+
+note right of Product
+  ProductStatus per REQ-003:
+  Draft / PendingReview / Rejected /
+  Published / TakenDown /
+  ViolationTakenDown / Sold
+  availableQty = stockQty - sum of
+  active reservation qty (REQ-006/014)
+end note
+
+note bottom of Reservation
+  ReservationStatus per REQ-012,
+  transitions limited to the six
+  allowed paths in REQ-013;
+  one active reservation per
+  buyer per product (REQ-015)
+end note
+@enduml

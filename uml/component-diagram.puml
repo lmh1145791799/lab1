@@ -1,0 +1,47 @@
+@startuml component-diagram
+title Component Diagram: Module Division and Dependencies
+
+actor Buyer
+actor Seller
+actor Admin
+
+package "Second-hand Trading System" {
+  [WebFrontend]
+  [APIGateway]
+  component "M1 User & Auth" as M1
+  component "M2 Product Management" as M2
+  component "M3 Search & Statistics" as M3
+  component "M4 Reservation & Trade" as M4
+  component "M5 Validation & Exception Control" as M5
+  component "M6 Log & Notification" as M6
+  [Scheduler]
+}
+
+database "Database\n(User/Product/Reservation/Audit/Notification/Log)" as DB
+folder "FileStorage\n(Product Images)" as FS
+
+Buyer --> WebFrontend
+Seller --> WebFrontend
+Admin --> WebFrontend
+WebFrontend --> APIGateway
+
+APIGateway --> M1 : login / auth
+APIGateway --> M2
+APIGateway --> M3
+APIGateway --> M4
+
+M3 --> M2 : read product data
+M4 --> M5 : pre-submit validation\n(REQ-014~017)
+M4 --> M2 : sync status and stock\n(REQ-020)
+M2 --> M4 : cancel reservations on\ntake-down / violation (REQ-005/020)
+M4 --> M6 : operation log / notify (REQ-022)
+M2 --> M6 : audit / violation log
+Scheduler --> M4 : timeout auto-processing\n(REQ-018)
+
+M1 --> DB
+M2 --> DB
+M2 --> FS : product image access
+M3 --> DB
+M4 --> DB
+M6 --> DB
+@enduml
