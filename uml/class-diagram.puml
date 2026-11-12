@@ -23,6 +23,11 @@ enum ReservationStatus {
   COMPLETED
 }
 
+enum StatisticsScope {
+  SELLER
+  GLOBAL
+}
+
 abstract class User {
   - userId : Long
   - account : String
@@ -135,6 +140,14 @@ User <|-- Buyer
 User <|-- Seller
 User <|-- Admin
 
+class Statistics {
+  - scope : StatisticsScope
+  - ownerId : Long
+  - publishedCount : int
+  - soldCount : int
+  - totalAmount : BigDecimal
+}
+
 Seller "1" --> "*" Product : publish / maintain
 Product "*" --> "1" Category : belongs to
 Product "1" *-- "*" ProductImage : contains
@@ -148,6 +161,9 @@ ReviewRecord "*" --> "1" Product : for
 
 User "1" --> "*" OperationLog : generates
 User "1" --> "*" Notification : receives
+
+Seller ..> Statistics : views (M3)
+Admin ..> Statistics : views (M3)
 
 note right of Product
   ProductStatus per REQ-003:

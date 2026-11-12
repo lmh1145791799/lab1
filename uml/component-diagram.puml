@@ -14,6 +14,7 @@ package "Second-hand Trading System" {
   component "M4 Reservation & Trade" as M4
   component "M5 Validation & Exception Control" as M5
   component "M6 Log & Notification" as M6
+  component "M7 Data Access" as M7 
   [Scheduler]
 }
 
@@ -38,10 +39,12 @@ M4 --> M6 : operation log / notify (REQ-022)
 M2 --> M6 : audit / violation log
 Scheduler --> M4 : timeout auto-processing\n(REQ-018)
 
-M1 --> DB
-M2 --> DB
+M1 --> M7 
+M2 --> M7  
 M2 --> FS : product image access
-M3 --> DB
-M4 --> DB
-M6 --> DB
+M3 --> M7 
+M4 --> M7 
+M6 --> M7 
+M7 --> DB
+
 @enduml

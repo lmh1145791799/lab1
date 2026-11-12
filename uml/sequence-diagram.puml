@@ -17,7 +17,7 @@ alt duplicate submission
   UI --> B : prompt "do not resubmit"
 else new request
   RS -> PS : query latest product status and available qty (REQ-016)
-  PS -> DB : read product row (lock)
+  PS -> DB : read product row 
   DB --> PS : status / stockQty / reservedQty
   PS --> RS : validation data
   alt validation failed (taken down / sold out / qty insufficient / active reservation exists, REQ-014/015/016)
