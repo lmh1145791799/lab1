@@ -1,5 +1,4 @@
 from enum import Enum
-from typing import Optional
 
 class ProductStatus(Enum):
     DRAFT = "draft"
@@ -78,11 +77,11 @@ class OperationLog:
         self.operate_time = operate_time
 
 class Notification:
-    def __init__(self, notice_id, user_id, content, type, send_time):
+    def __init__(self, notice_id, user_id, content, notice_type, send_time):
         self.notice_id = notice_id
         self.user_id = user_id
         self.content = content
-        self.type = type
+        self.type = notice_type
         self.send_time = send_time
 
 class Rejection(Exception):

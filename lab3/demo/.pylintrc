@@ -1,0 +1,25 @@
+[MAIN]
+disable=
+    missing-module-docstring,
+    missing-class-docstring,
+    missing-function-docstring,
+    too-many-arguments,
+    too-many-positional-arguments,
+    too-many-locals,
+    too-many-branches,
+    too-many-statements,
+    duplicate-code,
+    broad-exception-caught,
+    fixme,
+    consider-using-f-string,
+    too-few-public-methods
+
+[FORMAT]
+max-line-length=100
+
+[DESIGN]
+max-args=12
+max-locals=20
+max-branches=25
+max-statements=60
+max-attributes=12

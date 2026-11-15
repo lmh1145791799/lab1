@@ -142,7 +142,7 @@ def init_db(admin_config=None, rebuild=False):
         conn.close()
 
 
-""" 清空所有数据(仅测试用) """
+# 清空所有数据(仅测试用)
 def clear_all_data():
     conn = get_connection()
     try:
@@ -422,14 +422,14 @@ def insert_operation_log(operator_id, action, detail, result, related_type,
         conn.close()
 
 
-def insert_notification(user_id, content, type):
+def insert_notification(user_id, content, notice_type):
     conn = get_connection()
     try:
         with conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO notification (user_id, content, type, send_time) "
                 "VALUES (%s, %s, %s, NOW())",
-                (user_id, content, type),
+                (user_id, content, notice_type),
             )
         conn.commit()
     finally:

@@ -1,10 +1,11 @@
-import db
 from pymysql.err import OperationalError
+
+import db
 
 def process_expired():
     rows = db.find_expired_reservations()
     processed = []
-    for reservation_id, status, buyer_id, seller_id in rows:
+    for reservation_id, status, _b, _s in rows:
         try:
             if status == "pending_confirm":
                 result, info = db.expire_reservation(reservation_id)
