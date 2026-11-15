@@ -142,20 +142,6 @@ def init_db(admin_config=None, rebuild=False):
         conn.close()
 
 
-# 清空所有数据(仅测试用)
-def clear_all_data():
-    conn = get_connection()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SET FOREIGN_KEY_CHECKS = 0")
-            for table in ("reservation", "operation_log", "notification",
-                          "user_role", "product", "user"):
-                cur.execute("TRUNCATE TABLE " + table)
-            cur.execute("SET FOREIGN_KEY_CHECKS = 1")
-        conn.commit()
-    finally:
-        conn.close()
-
 #user 相关操作
 def insert_user(account, password_hash, nickname, contact, roles):
     conn = get_connection()
