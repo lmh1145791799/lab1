@@ -2,11 +2,20 @@ import db
 import models
 from services.auth import require_role
 
-def _validate_product_fields(title, price, stock_qty):
+def _validate_product_fields(title, description, category, price,
+                             condition_grade, location, stock_qty):
     if not title:
         raise models.Rejection("INVALID_INPUT", "title required")
+    if not description:
+        raise models.Rejection("INVALID_INPUT", "description required")
+    if not category:
+        raise models.Rejection("INVALID_INPUT", "category required")
     if price is None or price <= 0:
         raise models.Rejection("INVALID_INPUT", "price must be positive")
+    if not condition_grade:
+        raise models.Rejection("INVALID_INPUT", "condition grade required")
+    if not location:
+        raise models.Rejection("INVALID_INPUT", "location required")
     if stock_qty is None or stock_qty < 1:
         raise models.Rejection("INVALID_INPUT", "stock quantity must be >= 1")
 
@@ -26,11 +35,12 @@ def _get_owned_product(user, product_id):
 def create_draft(user, title, description, category, price, condition_grade,
                  location, trade_method, stock_qty):
     require_role(user, "seller")
-    _validate_product_fields(title, price, stock_qty)
+    _validate_product_fields(title, description, category, price,
+                             condition_grade, location, stock_qty)
     pid = db.insert_product(user.user_id, title, description, category, price,
                             condition_grade, location, trade_method, stock_qty)
     db.insert_operation_log(user.user_id, "product_create", "title=%s" % title,
-                            "ok", pid)
+                            "ok", "product", pid)
     return pid
 
 def submit_for_review(user, product_id):
@@ -40,7 +50,7 @@ def submit_for_review(user, product_id):
         raise models.Rejection("INVALID_TRANSITION",
                                "product is not in draft status")
     db.insert_operation_log(user.user_id, "product_submit_review", "",
-                            "ok", product_id)
+                            "ok", "product", product_id)
 
 def audit(user, product_id, approved, reason=None):
     require_role(user, "admin")
@@ -64,12 +74,13 @@ def audit(user, product_id, approved, reason=None):
                            "audit")
     db.insert_operation_log(user.user_id, "product_audit",
                             "result=%s reason=%s" % (result, reason),
-                            result, product_id)
+                            result, "product", product_id)
 
 def modify_product(user, product_id, title, description, category, price,
                    condition_grade, location, trade_method, stock_qty):
     require_role(user, "seller")
-    _validate_product_fields(title, price, stock_qty)
+    _validate_product_fields(title, description, category, price,
+                             condition_grade, location, stock_qty)
     product = _get_owned_product(user, product_id)
     status = product[7]
     if status == "draft":
@@ -91,7 +102,7 @@ def modify_product(user, product_id, title, description, category, price,
                                "product changed concurrently, please retry")
     db.insert_operation_log(user.user_id, "product_modify",
                             "from=%s to=%s" % (status, to_status),
-                            "ok", product_id)
+                            "ok", "product", product_id)
 
 def adjust_stock(user, product_id, new_qty):
     require_role(user, "seller")
@@ -102,7 +113,8 @@ def adjust_stock(user, product_id, new_qty):
         raise models.Rejection("STOCK_CONFLICT",
                                "new stock must cover active reservations")
     db.insert_operation_log(user.user_id, "product_adjust_stock",
-                            "new_qty=%s" % new_qty, "ok", product_id)
+                            "new_qty=%s" % new_qty, "ok", "product",
+                            product_id)
 
 
 def take_down(user, product_id):
@@ -114,7 +126,8 @@ def take_down(user, product_id):
         raise models.Rejection("INVALID_TRANSITION",
                                "product is not published")
     db.insert_operation_log(user.user_id, "product_take_down",
-                            "cancelled=%d" % cancelled, "ok", product_id)
+                            "cancelled=%d" % cancelled, "ok", "product",
+                            product_id)
     db.insert_notification(product[1],
                            "product %s taken down, %d active reservations "
                            "cancelled" % (product_id, cancelled), "take_down")
@@ -132,7 +145,7 @@ def handle_violation(user, product_id, reason):
                                "product is not published")
     db.insert_operation_log(user.user_id, "product_violation",
                             "reason=%s cancelled=%d" % (reason, cancelled),
-                            "ok", product_id)
+                            "ok", "product", product_id)
     db.insert_notification(product[1],
                            "product %s violation taken down, reason: %s"
                            % (product_id, reason), "violation")
@@ -144,7 +157,7 @@ def republish(user, product_id):
         raise models.Rejection("INVALID_TRANSITION",
                                "product is not taken down")
     db.insert_operation_log(user.user_id, "product_republish", "",
-                            "ok", product_id)
+                            "ok", "product", product_id)
 
 def restore_from_violation(user, product_id):
     require_role(user, "admin")
@@ -154,4 +167,4 @@ def restore_from_violation(user, product_id):
         raise models.Rejection("INVALID_TRANSITION",
                                "product is not violation taken down")
     db.insert_operation_log(user.user_id, "product_restore", "",
-                            "ok", product_id)
+                            "ok", "product", product_id)

@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS user (
     account     VARCHAR(64)  NOT NULL UNIQUE,
     password    VARCHAR(128) NOT NULL,
     nickname    VARCHAR(64)  NOT NULL,
-    contact     VARCHAR(64)
+    contact     VARCHAR(64) NOT NULL
 ) ENGINE=InnoDB
 """,
 """
@@ -40,11 +40,11 @@ CREATE TABLE IF NOT EXISTS product (
     product_id   BIGINT AUTO_INCREMENT PRIMARY KEY,
     seller_id    BIGINT NOT NULL,
     title        VARCHAR(128) NOT NULL,
-    description  TEXT,
-    category     VARCHAR(64),
+    description  TEXT NOT NULL,
+    category     VARCHAR(64) NOT NULL,
     price        DECIMAL(10,2) NOT NULL,
-    condition_grade VARCHAR(32),
-    location     VARCHAR(128),
+    condition_grade VARCHAR(32) NOT NULL,
+    location     VARCHAR(128) NOT NULL,
     trade_method VARCHAR(32),
     stock_qty    INT NOT NULL,
     reserved_qty INT NOT NULL DEFAULT 0,
@@ -97,7 +97,8 @@ CREATE TABLE IF NOT EXISTS operation_log (
     action       VARCHAR(64) NOT NULL,
     detail       VARCHAR(255),
     result       VARCHAR(64),
-    related_id   BIGINT,
+    related_type ENUM('product','reservation') NOT NULL,
+    related_id   BIGINT NOT NULL,
     operate_time DATETIME NOT NULL,
     FOREIGN KEY (operator_id) REFERENCES user(user_id)
 ) ENGINE=InnoDB
@@ -114,8 +115,87 @@ CREATE TABLE IF NOT EXISTS notification (
 """,
 ]
 # endregion DDL_STATEMENTS
+#数据库连接与初始化
 def get_connection():
     return pymysql.connect(**DB_CONFIG)
+
+
+def init_db(admin_config=None, rebuild=False):
+    cfg = dict(DB_CONFIG)
+    db_name = cfg.pop("database")
+    if admin_config:
+        cfg.update(admin_config)
+    conn = pymysql.connect(**cfg)
+    try:
+        with conn.cursor() as cur:
+            if rebuild:
+                cur.execute("DROP DATABASE IF EXISTS %s" % db_name)
+            cur.execute(
+                f"CREATE DATABASE IF NOT EXISTS {db_name} "
+                "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+            )
+            cur.execute(f"USE {db_name}")
+            for stmt in DDL_STATEMENTS:
+                cur.execute(stmt)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+""" 清空所有数据(仅测试用) """
+def clear_all_data():
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SET FOREIGN_KEY_CHECKS = 0")
+            for table in ("reservation", "operation_log", "notification",
+                          "user_role", "product", "user"):
+                cur.execute("TRUNCATE TABLE " + table)
+            cur.execute("SET FOREIGN_KEY_CHECKS = 1")
+        conn.commit()
+    finally:
+        conn.close()
+
+#user 相关操作
+def insert_user(account, password_hash, nickname, contact, roles):
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO user (account, password, nickname, contact) "
+                "VALUES (%s, %s, %s, %s)",
+                (account, password_hash, nickname, contact),
+            )
+            user_id = cur.lastrowid
+            for role in roles:
+                cur.execute(
+                    "INSERT INTO user_role (user_id, role) VALUES (%s, %s)",
+                    (user_id, role),
+                )
+        conn.commit()
+        return user_id
+    except IntegrityError:
+        conn.rollback()
+        return None
+    finally:
+        conn.close()
+
+
+def find_user_by_account(account):
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT u.user_id, u.account, u.password, u.nickname, u.contact, "
+                "GROUP_CONCAT(r.role) "
+                "FROM user u LEFT JOIN user_role r ON r.user_id = u.user_id "
+                "WHERE u.account = %s GROUP BY u.user_id",
+                (account,),
+            )
+            return cur.fetchone()
+    finally:
+        conn.close()
+
 
 #product 相关操作
 def insert_product(seller_id, title, description, category, price,
@@ -243,79 +323,6 @@ def take_down_and_cancel(product_id, new_status, cancel_reason):
         conn.close()
 
 
-def init_db(admin_config=None):
-    cfg = dict(DB_CONFIG)
-    db_name = cfg.pop("database")
-    if admin_config:
-        cfg.update(admin_config)
-    conn = pymysql.connect(**cfg)
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                f"CREATE DATABASE IF NOT EXISTS {db_name} "
-                "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
-            )
-            cur.execute(f"USE {db_name}")
-            for stmt in DDL_STATEMENTS:
-                cur.execute(stmt)
-        conn.commit()
-    finally:
-        conn.close()
-
-def insert_user(account, password_hash, nickname, contact, roles):
-    conn = get_connection()
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO user (account, password, nickname, contact) "
-                "VALUES (%s, %s, %s, %s)",
-                (account, password_hash, nickname, contact),
-            )
-            user_id = cur.lastrowid
-            for role in roles:
-                cur.execute(
-                    "INSERT INTO user_role (user_id, role) VALUES (%s, %s)",
-                    (user_id, role),
-                )
-        conn.commit()
-        return user_id
-    except IntegrityError:
-        conn.rollback()
-        return None
-    finally:
-        conn.close()
-
-
-def find_user_by_account(account):
-    conn = get_connection()
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT u.user_id, u.account, u.password, u.nickname, u.contact, "
-                "GROUP_CONCAT(r.role) "
-                "FROM user u LEFT JOIN user_role r ON r.user_id = u.user_id "
-                "WHERE u.account = %s GROUP BY u.user_id",
-                (account,),
-            )
-            return cur.fetchone()
-    finally:
-        conn.close()
-
-""" 清空所有数据(仅测试用) """
-def clear_all_data():
-    conn = get_connection()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SET FOREIGN_KEY_CHECKS = 0")
-            for table in ("reservation", "operation_log", "notification",
-                          "user_role", "product", "user"):
-                cur.execute("TRUNCATE TABLE " + table)
-            cur.execute("SET FOREIGN_KEY_CHECKS = 1")
-        conn.commit()
-    finally:
-        conn.close()
-
-
 def find_product(product_id):
     conn = get_connection()
     try:
@@ -330,15 +337,85 @@ def find_product(product_id):
     finally:
         conn.close()
 
+
+def search_products(keyword=None, category=None, min_price=None,
+                    max_price=None, location=None, sort_desc=False):
+    conditions = ["p.status = 'published'"]
+    params = []
+    if keyword:
+        conditions.append("p.title LIKE %s")
+        params.append("%" + keyword + "%")
+    if category:
+        conditions.append("p.category = %s")
+        params.append(category)
+    if min_price is not None:
+        conditions.append("p.price >= %s")
+        params.append(min_price)
+    if max_price is not None:
+        conditions.append("p.price <= %s")
+        params.append(max_price)
+    if location:
+        conditions.append("p.location = %s")
+        params.append(location)
+    order = "DESC" if sort_desc else "ASC"
+    sql = (
+        "SELECT p.product_id, p.seller_id, p.title, p.category, p.price, "
+        "p.stock_qty, p.reserved_qty, p.status "
+        "FROM product p WHERE " + " AND ".join(conditions) +
+        " ORDER BY p.publish_time " + order + ", p.product_id " + order
+    )
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            rows = cur.fetchall()
+        return [
+            (r[0], r[1], r[2], r[3], float(r[4]), r[5], r[6], r[7])
+            for r in rows
+        ]
+    finally:
+        conn.close()
+
+def list_all_products():
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT product_id, seller_id, title, category, price, "
+                "stock_qty, reserved_qty, status "
+                "FROM product ORDER BY status, product_id"
+            )
+            return cur.fetchall()
+    finally:
+        conn.close()
+
+
+def list_seller_products(seller_id):
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT product_id, seller_id, title, category, price, "
+                "stock_qty, reserved_qty, status "
+                "FROM product WHERE seller_id = %s ORDER BY product_id",
+                (seller_id,),
+            )
+            return cur.fetchall()
+    finally:
+        conn.close()
+
+
 #通知日志相关操作
-def insert_operation_log(operator_id, action, detail, result, related_id):
+def insert_operation_log(operator_id, action, detail, result, related_type,
+                         related_id):
     conn = get_connection()
     try:
         with conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO operation_log (operator_id, action, detail, result, "
-                "related_id, operate_time) VALUES (%s, %s, %s, %s, %s, NOW())",
-                (operator_id, action, detail, result, related_id),
+                "related_type, related_id, operate_time) "
+                "VALUES (%s, %s, %s, %s, %s, %s, NOW())",
+                (operator_id, action, detail, result, related_type, related_id),
             )
         conn.commit()
     finally:
@@ -357,6 +434,52 @@ def insert_notification(user_id, content, type):
         conn.commit()
     finally:
         conn.close()
+
+
+def list_user_notifications(user_id):
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT notice_id, content, type, send_time "
+                "FROM notification WHERE user_id = %s ORDER BY send_time DESC",
+                (user_id,),
+            )
+            return cur.fetchall()
+    finally:
+        conn.close()
+
+
+def list_logs_for_seller(seller_id):
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT l.log_id, l.operator_id, l.action, l.detail, l.result, "
+                "l.related_type, l.related_id, l.operate_time "
+                "FROM operation_log l JOIN product p "
+                "ON l.related_type = 'product' AND p.product_id = l.related_id "
+                "WHERE p.seller_id = %s ORDER BY l.operate_time DESC",
+                (seller_id,),
+            )
+            return cur.fetchall()
+    finally:
+        conn.close()
+
+
+def list_all_logs():
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT log_id, operator_id, action, detail, result, "
+                "related_type, related_id, operate_time "
+                "FROM operation_log ORDER BY operate_time DESC"
+            )
+            return cur.fetchall()
+    finally:
+        conn.close()
+
 
 #reservation 相关操作
 def create_reservation(product_id, buyer_id, seller_id, quantity, deadline, fingerprint):
@@ -406,6 +529,7 @@ def create_reservation(product_id, buyer_id, seller_id, quantity, deadline, fing
         raise
     finally:
         conn.close()
+
 
 def _lock_reservation(cur, reservation_id):
     cur.execute(
@@ -515,11 +639,18 @@ def complete_trade(reservation_id):
                 return ("REJECTED", None)
             quantity, product_id = row[0], row[2]
             cur.execute(
-                "UPDATE product SET stock_qty = stock_qty - %s, "
-                "reserved_qty = reserved_qty - %s, "
-                "status = IF(stock_qty - %s = 0, 'sold', status) "
+                "SELECT stock_qty, status FROM product "
                 "WHERE product_id = %s",
-                (quantity, quantity, quantity, product_id),
+                (product_id,),
+            )
+            stock_row = cur.fetchone()
+            new_stock = stock_row[0] - quantity
+            new_status = "sold" if new_stock == 0 else stock_row[1]
+            cur.execute(
+                "UPDATE product SET stock_qty = %s, "
+                "reserved_qty = reserved_qty - %s, "
+                "status = %s WHERE product_id = %s",
+                (new_stock, quantity, new_status, product_id),
             )
             cur.execute(
                 "UPDATE reservation SET status = 'completed', finish_time = NOW(), "
@@ -566,11 +697,18 @@ def confirm_completion(reservation_id, party):
             completed = flags[0] is not None and flags[1] is not None
             if completed:
                 cur.execute(
-                    "UPDATE product SET stock_qty = stock_qty - %s, "
-                    "reserved_qty = reserved_qty - %s, "
-                    "status = IF(stock_qty - %s = 0, 'sold', status) "
+                    "SELECT stock_qty, status FROM product "
                     "WHERE product_id = %s",
-                    (quantity, quantity, quantity, product_id),
+                    (product_id,),
+                )
+                stock_row = cur.fetchone()
+                new_stock = stock_row[0] - quantity
+                new_status = "sold" if new_stock == 0 else stock_row[1]
+                cur.execute(
+                    "UPDATE product SET stock_qty = %s, "
+                    "reserved_qty = reserved_qty - %s, "
+                    "status = %s WHERE product_id = %s",
+                    (new_stock, quantity, new_status, product_id),
                 )
                 cur.execute(
                     "UPDATE reservation SET status = 'completed', "
@@ -613,5 +751,107 @@ def find_expired_reservations():
                 "AND valid_deadline < NOW()"
             )
             return cur.fetchall()
+    finally:
+        conn.close()
+
+
+def list_user_reservations(buyer_id):
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT reservation_id, product_id, quantity, reserve_time, "
+                "valid_deadline, status, confirm_time, finish_time, cancel_reason "
+                "FROM reservation WHERE buyer_id = %s ORDER BY reserve_time DESC",
+                (buyer_id,),
+            )
+            return cur.fetchall()
+    finally:
+        conn.close()
+
+
+def list_seller_reservations(seller_id):
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT reservation_id, product_id, buyer_id, quantity, "
+                "reserve_time, status "
+                "FROM reservation WHERE seller_id = %s ORDER BY reserve_time DESC",
+                (seller_id,),
+            )
+            return cur.fetchall()
+    finally:
+        conn.close()
+
+
+#统计相关操作
+def seller_statistics(seller_id):
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT COUNT(*) FROM product WHERE seller_id = %s",
+                (seller_id,),
+            )
+            product_count = cur.fetchone()[0]
+            cur.execute(
+                "SELECT COALESCE(SUM(quantity), 0) FROM reservation "
+                "WHERE seller_id = %s "
+                "AND status IN ('pending_confirm', 'confirmed')",
+                (seller_id,),
+            )
+            active_reserved = cur.fetchone()[0]
+            cur.execute(
+                "SELECT COALESCE(SUM(quantity), 0) FROM reservation "
+                "WHERE seller_id = %s AND status = 'completed'",
+                (seller_id,),
+            )
+            completed_qty = cur.fetchone()[0]
+            cur.execute(
+                "SELECT COUNT(*) FROM product "
+                "WHERE seller_id = %s AND status = 'sold'",
+                (seller_id,),
+            )
+            sold_count = cur.fetchone()[0]
+        return {
+            "product_count": int(product_count),
+            "active_reserved_qty": int(active_reserved),
+            "completed_qty": int(completed_qty),
+            "sold_count": int(sold_count),
+        }
+    finally:
+        conn.close()
+
+
+def admin_statistics():
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM product")
+            product_count = cur.fetchone()[0]
+            cur.execute(
+                "SELECT COUNT(*) FROM product WHERE status = 'published'"
+            )
+            published_count = cur.fetchone()[0]
+            cur.execute(
+                "SELECT COALESCE(SUM(quantity), 0) FROM reservation "
+                "WHERE status = 'completed'"
+            )
+            trade_qty = cur.fetchone()[0]
+            cur.execute(
+                "SELECT COUNT(*) FROM product "
+                "WHERE status = 'violation_taken_down'"
+            )
+            violation_count = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM user")
+            user_count = cur.fetchone()[0]
+        return {
+            "product_count": int(product_count),
+            "published_count": int(published_count),
+            "trade_qty": int(trade_qty),
+            "violation_count": int(violation_count),
+            "user_count": int(user_count),
+        }
     finally:
         conn.close()

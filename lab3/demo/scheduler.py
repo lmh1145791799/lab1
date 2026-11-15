@@ -18,7 +18,8 @@ def process_expired():
             continue
         if result != "OK":
             continue
-        db.insert_operation_log(None, action, "system", "ok", reservation_id)
+        db.insert_operation_log(None, action, "system", "ok",
+                                "reservation", reservation_id)
         db.insert_notification(info["buyer_id"], message, "scheduler")
         db.insert_notification(info["seller_id"], message, "scheduler")
         processed.append(reservation_id)

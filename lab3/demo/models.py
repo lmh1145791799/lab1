@@ -23,13 +23,6 @@ class Role(Enum):
     SELLER = "seller"
     ADMIN = "admin"
 
-class CreateResult(Enum):
-    OK = "ok"
-    DUPLICATE = "duplicate"
-    DUPLICATE_ACTIVE = "duplicate_active"
-    REJECTED = "rejected"
-    RETRY = "retry"
-
 class User:
     def __init__(self, user_id, account, nickname, contact, roles):
         self.user_id = user_id

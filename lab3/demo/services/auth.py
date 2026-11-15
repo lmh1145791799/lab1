@@ -9,6 +9,8 @@ def _hash(password):
 def register(account, password, nickname, contact, roles):
     if not account or not password or not nickname:
         raise models.Rejection("INVALID_INPUT", "account/password/nickname required")
+    if not contact:
+        raise models.Rejection("INVALID_INPUT", "contact required")
     if not roles or any(r not in ("buyer", "seller") for r in roles):
         raise models.Rejection("INVALID_ROLE", "roles must be buyer and/or seller")
     user_id = db.insert_user(account, _hash(password), nickname, contact, tuple(roles))
@@ -18,7 +20,8 @@ def register(account, password, nickname, contact, roles):
 
 
 def seed_admin(account, password):
-    user_id = db.insert_user(account, _hash(password), "admin", None, ("admin",))
+    user_id = db.insert_user(account, _hash(password), "admin", "system",
+                             ("admin",))
     if user_id is None:
         raise models.Rejection("ACCOUNT_EXISTS", "admin account already seeded")
     return user_id

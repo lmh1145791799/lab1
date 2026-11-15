@@ -18,30 +18,33 @@ def create_reservation(user, product_id, quantity, fingerprint):
     if product is None:
         raise models.Rejection("PRODUCT_NOT_FOUND", "product does not exist")
     seller_id = product[1]
+    if seller_id == user.user_id:
+        raise models.Rejection("SELF_RESERVATION",
+                               "cannot reserve your own product")
 
     deadline = datetime.datetime.now() + datetime.timedelta(days=RESERVE_VALID_DAYS)
     result, rid = db.create_reservation(
         product_id, user.user_id, seller_id, quantity, deadline, fingerprint
     )
 
-    if result == models.CreateResult.OK.value:
+    if result == "OK":
         db.insert_operation_log(
             user.user_id, "reservation_create",
             "product=%s qty=%s" % (product_id, quantity),
-            "ok", rid,
+            "ok", "reservation", rid,
         )
         db.insert_notification(
             seller_id, "new reservation on product %s, qty %s"
             % (product_id, quantity), "reservation",
         )
         return rid
-    if result == models.CreateResult.DUPLICATE.value:
+    if result == "DUPLICATE":
         return rid
-    if result == models.CreateResult.DUPLICATE_ACTIVE.value:
+    if result == "DUPLICATE_ACTIVE":
         raise models.Rejection(
             "ACTIVE_RESERVATION_EXISTS", "you already have an active reservation on this product"
         )
-    if result == models.CreateResult.REJECTED.value:
+    if result == "REJECTED":
         raise models.Rejection(
             "UNAVAILABLE", "product unavailable or insufficient stock, please refresh page"
         )
@@ -69,7 +72,7 @@ def confirm(user, reservation_id):
         raise models.Rejection("CONFLICT_RETRY",
                                "reservation changed concurrently, please retry")
     db.insert_operation_log(user.user_id, "reservation_confirm", "",
-                            "ok", reservation_id)
+                            "ok", "reservation", reservation_id)
     db.insert_notification(info["buyer_id"],
                            "reservation %s confirmed by seller" % reservation_id,
                            "reservation")
@@ -86,7 +89,7 @@ def reject(user, reservation_id):
         raise models.Rejection("CONFLICT_RETRY",
                                "reservation changed concurrently, please retry")
     db.insert_operation_log(user.user_id, "reservation_reject", "",
-                            "ok", reservation_id)
+                            "ok", "reservation", reservation_id)
     db.insert_notification(info["buyer_id"],
                            "reservation %s rejected by seller" % reservation_id,
                            "reservation")
@@ -105,7 +108,8 @@ def cancel(user, reservation_id, reason=None):
         raise models.Rejection("CONFLICT_RETRY",
                                "reservation changed concurrently, please retry")
     db.insert_operation_log(user.user_id, "reservation_cancel",
-                            "reason=%s" % reason, "ok", reservation_id)
+                            "reason=%s" % reason, "ok", "reservation",
+                            reservation_id)
     db.insert_notification(info["seller_id"],
                            "reservation %s cancelled, reason: %s"
                            % (reservation_id, reason), "reservation")
@@ -125,7 +129,8 @@ def confirm_completion(user, reservation_id):
         raise models.Rejection("CONFLICT_RETRY",
                                "reservation changed concurrently, please retry")
     db.insert_operation_log(user.user_id, "reservation_confirm_completion",
-                            "party=%s" % party, "ok", reservation_id)
+                            "party=%s" % party, "ok", "reservation",
+                            reservation_id)
     if info["completed"]:
         db.insert_notification(info["buyer_id"],
                                "trade %s completed" % reservation_id,
